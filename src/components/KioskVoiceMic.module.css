@@ -464,3 +464,51 @@
   flex-shrink: 0;
   color: #D97706;
 }
+
+@media (max-width: 640px) {
+  .micWrap {
+    width: 82px;
+    height: 82px;
+    min-width: 82px;
+    min-height: 82px;
+  }
+
+  .micButton {
+    width: 76px;
+    height: 76px;
+    min-width: 76px;
+    min-height: 76px;
+  }
+
+  .statusContainer {
+    height: 44px;
+    min-height: 44px;
+    margin-top: 0.15rem;
+  }
+
+  .primaryStatusText {
+    font-size: 1.05rem;
+  }
+
+  .secondaryStatusText {
+    font-size: 0.82rem;
+  }
+
+  .feedbackSlot {
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    margin-top: 0.15rem;
+  }
+
+  .hintBanner {
+    font-size: 0.78rem;
+    padding: 3px 10px;
+    max-width: 95%;
+  }
+
+  .exampleHelper {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.75rem;
+  }
+}

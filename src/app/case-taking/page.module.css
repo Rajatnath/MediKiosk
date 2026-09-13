@@ -1,8 +1,9 @@
 .main {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 58px);
-  max-height: calc(100dvh - 58px);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -113,14 +114,16 @@
 /* ─── Voice-first conversation stage (Anchored layout to prevent vertical jitter) ─── */
 .stage {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   gap: 14px;
-  padding: clamp(14px, 2.8vh, 28px) 20px 16px;
+  padding: clamp(12px, 2.2vh, 24px) 16px clamp(48px, 8vh, 84px);
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
   text-align: center;
@@ -393,6 +396,9 @@
   box-shadow: 0 2px 6px rgba(13, 40, 20, 0.04);
   min-height: 48px;
   text-align: left;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 .quickSymptomCard:hover:not(:disabled) {
   border-color: var(--green-500);
@@ -417,6 +423,11 @@
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
+  min-width: 0;
+  word-break: break-word;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* MCQ tap options — arranged with smooth elevation */
@@ -906,17 +917,107 @@
 
 
 /* Mobile Responsive Adjustments */
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .topBar {
     flex-wrap: wrap;
     justify-content: flex-start;
-    padding: 12px 16px;
-    gap: 12px;
+    padding: 10px 14px;
+    gap: 8px;
   }
-  
+
+  .topTitle {
+    font-size: 16px;
+  }
+
+  .topPatient {
+    font-size: 12px;
+  }
+
   .progressWrap {
     width: 100%;
     justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .progressLabel {
+    font-size: 12px;
+  }
+
+  /* Stage adjustments: tight spacing + generous bottom clearance */
+  .stage {
+    gap: 10px;
+    padding: 10px 12px clamp(48px, 8vh, 84px);
+  }
+
+  /* Compact question bubble on mobile */
+  .questionBubble {
+    padding: 10px 14px;
+    min-height: 56px;
+    gap: 10px;
+    border-radius: var(--radius-lg);
+  }
+
+  .questionText {
+    font-size: 1.05rem;
+    line-height: 1.35;
+  }
+
+  .replaySpeechBtn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  /* Symptom Grid: 2 columns on mobile so nothing is ever clipped horizontally */
+  .quickSymptomSection {
+    gap: 8px;
+    width: 100%;
+  }
+
+  .quickSymptomTitle {
+    font-size: 12px;
+  }
+
+  .quickSymptomGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .quickSymptomCard {
+    padding: 8px 10px;
+    min-height: 44px;
+    gap: 8px;
+    border-radius: 10px;
+  }
+
+  .quickSymptomIcon {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+  }
+
+  .quickSymptomLabel {
+    font-size: 12px;
+  }
+
+  /* MCQ options on mobile */
+  .mcqGrid {
+    gap: 8px;
+    width: 100%;
+  }
+
+  .mcqBtn {
+    padding: 7px 14px;
+    font-size: 13.5px;
+    min-height: 38px;
+  }
+
+  /* Type instead button margin */
+  .typeSection {
+    margin-top: 4px;
+    margin-bottom: 8px;
   }
 
   .completeBar {
@@ -940,5 +1041,11 @@
     font-size: 16px;
     height: auto;
     justify-content: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .quickSymptomGrid {
+    grid-template-columns: 1fr;
   }
 }

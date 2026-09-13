@@ -856,7 +856,7 @@ function CaseTakingContent() {
   ];
 
   return (
-    <div className="page-container" style={{ height: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
+    <div className="page-container" style={{ minHeight: '100dvh', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <AccessibilityBar
         lang={lang}
         onLangChange={(l) => updateSession({ language: l })}
