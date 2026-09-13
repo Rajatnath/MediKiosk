@@ -9,6 +9,12 @@ export async function POST(req: NextRequest) {
     const audioFile = formData.get('audio') as File;
     const lang = formData.get('lang') as string || 'hi';
 
+    console.log('\n--- DIAGNOSTICS: SERVER (INCOMING) ---');
+    console.log('Incoming filename:', audioFile?.name);
+    console.log('Incoming MIME type:', audioFile?.type);
+    console.log('Incoming file size:', audioFile?.size);
+    console.log('--------------------------------------');
+
     if (!audioFile) {
       return NextResponse.json({ error: 'No audio file' }, { status: 400 });
     }
@@ -36,9 +42,14 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await audioFile.arrayBuffer();
     const safeBlob = new Blob([arrayBuffer], { type: mimeType || 'audio/webm' });
     sarvamFormData.append('file', safeBlob, filename);
-    sarvamFormData.append('model', 'saaras:v3'); // Upgrade to latest Sarvam STT model
+    sarvamFormData.append('model', 'saarika:v2.5');
     sarvamFormData.append('language_code', languageCode);
     sarvamFormData.append('with_timestamps', 'false');
+
+    console.log('\n--- DIAGNOSTICS: SERVER (RECONSTRUCTED) ---');
+    console.log('Reconstructed file MIME type:', safeBlob.type);
+    console.log('Reconstructed file size:', safeBlob.size);
+    console.log('---------------------------------------------');
 
     const response = await fetch('https://api.sarvam.ai/speech-to-text', {
       method: 'POST',
@@ -49,13 +60,19 @@ export async function POST(req: NextRequest) {
       signal: AbortSignal.timeout(30000) // Increase timeout to 30s
     });
 
+    console.log('\n--- DIAGNOSTICS: SERVER (SARVAM RESPONSE) ---');
+    console.log('HTTP status:', response.status);
+
     if (!response.ok) {
       const err = await response.text();
-      console.error('Sarvam STT error:', response.status, err);
+      console.log('Error JSON body:', err);
+      console.log('---------------------------------------------');
       return NextResponse.json({ error: 'STT failed', details: err }, { status: response.status });
     }
 
     const data = await response.json();
+    console.log('Success payload:', JSON.stringify(data));
+    console.log('---------------------------------------------');
     return NextResponse.json({ transcript: data.transcript || '' });
   } catch (err) {
     console.error('STT route error:', err);

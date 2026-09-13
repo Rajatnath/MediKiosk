@@ -427,6 +427,13 @@ function CaseTakingContent() {
   }
 
   async function processVoice(blob: Blob) {
+    console.log('--- DIAGNOSTICS: CLIENT ---');
+    console.log('User Agent:', navigator.userAgent);
+    console.log('Selected MIME type:', recordedMimeTypeRef.current);
+    console.log('Blob type:', blob.type);
+    console.log('Blob size:', blob.size);
+    console.log('---------------------------');
+
     // If the recording is empty/negligible and user didn't speak
     if (!blob || blob.size < 1200) {
       if (browserTranscriptRef.current && browserTranscriptRef.current.trim()) {
