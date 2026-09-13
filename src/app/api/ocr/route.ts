@@ -86,11 +86,17 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString('base64');
     const mimeType = file.type || 'image/jpeg';
+    // Determine whether document is PDF or image for Mistral OCR
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const documentPayload = isPdf
+      ? { type: 'document_url', document_url: `data:application/pdf;base64,${base64}` }
+      : { type: 'image_url', image_url: `data:${mimeType};base64,${base64}` };
 
     let rawText = '';
 
     // ──────────────────────────────────────────────────────────────────
-    // Step 1: Try Mistral OCR to extract raw text from the image
+    // Step 1: Mistral OCR (mistral-ocr-latest)
+    // Primary engine: Analyzes the image/document and extracts text in all languages
     // ──────────────────────────────────────────────────────────────────
     if (mistralKey) {
       try {
@@ -102,10 +108,7 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({
             model: 'mistral-ocr-latest',
-            document: {
-              type: 'image_url',
-              image_url: `data:${mimeType};base64,${base64}`,
-            },
+            document: documentPayload,
           }),
         });
 
@@ -121,57 +124,31 @@ export async function POST(req: NextRequest) {
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // Step 2a: If Mistral produced text → use Gemini text extraction
-    // ──────────────────────────────────────────────────────────────────
-    if (rawText.trim() && geminiKey) {
-      try {
-        const result = await geminiTextExtraction(geminiKey, rawText);
-        if (result) {
-          const confidence = determineConfidence(result);
-          return NextResponse.json({
-            ...result,
-            confidence,
-            raw_text: rawText,
-          });
-        }
-      } catch (gErr) {
-        console.warn('Gemini text extraction failed:', gErr);
-      }
-    }
-
-    // ──────────────────────────────────────────────────────────────────
-    // Step 2b: Gemini Vision fallback — send the image directly
-    // This handles cases where Mistral OCR failed or is unavailable
-    // ──────────────────────────────────────────────────────────────────
-    if (geminiKey) {
-      try {
-        const result = await geminiVisionExtraction(geminiKey, base64, mimeType);
-        if (result) {
-          const confidence = determineConfidence(result);
-          return NextResponse.json({
-            ...result,
-            confidence,
-            raw_text: result.raw_text || rawText || '[Extracted via Gemini Vision]',
-          });
-        }
-      } catch (gvErr) {
-        console.warn('Gemini Vision extraction failed:', gvErr);
-      }
-    }
-
-    // ──────────────────────────────────────────────────────────────────
-    // Step 3: If we at least got raw text from Mistral OCR
-    // Extract medications and vitals via fallback parser
+    // Step 2: Extract structured medical data from Mistral OCR text
     // ──────────────────────────────────────────────────────────────────
     if (rawText.trim()) {
-      const parsed = parseBasicMedicalText(rawText);
-      const confidence = (parsed.medications.length > 0 || parsed.labs.length > 0) ? 'HIGH' : 'NEEDS_VERIFICATION';
+      let result: Record<string, unknown> | null = null;
+
+      // 2a. First try Mistral clinical entity extraction (preserves multilingual nuances)
+      if (mistralKey) {
+        result = await mistralEntityExtraction(mistralKey, rawText);
+      }
+
+      // 2b. Secondary fallback: Gemini text extraction (text only, not vision)
+      if (!result && geminiKey) {
+        result = await geminiTextExtraction(geminiKey, rawText);
+      }
+
+      // 2c. Tertiary fallback: Deterministic regex medical parser
+      if (!result) {
+        result = parseBasicMedicalText(rawText);
+      }
+
+      const confidence = determineConfidence(result);
       return NextResponse.json({
-        raw_text: rawText,
+        ...result,
         confidence,
-        diagnosis: parsed.diagnosis,
-        medications: parsed.medications,
-        labs: parsed.labs,
+        raw_text: rawText,
       });
     }
 
@@ -197,6 +174,71 @@ export async function POST(req: NextRequest) {
       labs: [],
     }, { status: 500 });
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Mistral clinical entity extraction (processes Mistral OCR markdown text)
+// ════════════════════════════════════════════════════════════════════════
+async function mistralEntityExtraction(
+  apiKey: string,
+  rawText: string
+): Promise<Record<string, unknown> | null> {
+  const extractPrompt = `You are an expert clinical document parser specializing in Indian hospital prescriptions and multi-lingual medical records.
+Extract structured clinical information from the following OCR text extracted from the document.
+
+Document OCR text:
+"""
+${rawText.slice(0, 6000)}
+"""
+
+Return ONLY valid JSON (no markdown, no backticks, no conversational text):
+{
+  "date": "YYYY-MM-DD or string or null",
+  "diagnosis": ["condition1", "condition2"],
+  "medications": [
+    { "name": "drug name", "dose": "dose string or null", "frequency": "frequency or null" }
+  ],
+  "labs": [
+    { "name": "test or vital name", "value": "value string", "unit": "unit or null", "reference_range": "range or null", "status": "NORMAL/LOW/HIGH/null" }
+  ],
+  "doctor": "doctor name or null",
+  "hospital": "hospital or clinic name or null",
+  "confidence": "HIGH or NEEDS_VERIFICATION"
+}
+
+CRITICAL RULES:
+1. Thoroughly parse all medications (look for Tab, Cap, Syp, Inj, drops, dosages like mg, ml, frequencies like 1-0-1, OD, BD, TDS, HS, etc.).
+2. Extract all vitals and laboratory tests (BP / Blood Pressure, Pulse / Heart Rate, SPO2, Temp / Temperature, Glucose / Sugar, HbA1c, etc.) into "labs".
+3. Extract doctor names (look for Dr., MBBS, MD, Consultant, etc.) and hospital/clinic names (including any regional script or English names).
+4. If readable clinical data (medicines, tests, vitals, or doctor/clinic) is present, ALWAYS set "confidence": "HIGH".
+5. Only set "confidence": "NEEDS_VERIFICATION" if the text contains zero recognizable medical information.`;
+
+  try {
+    const resp = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'open-mistral-7b',
+        messages: [{ role: 'user', content: extractPrompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      }),
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      return extractJsonFromText(content);
+    } else {
+      console.warn('Mistral entity extraction returned status:', resp.status, await resp.text());
+    }
+  } catch (err) {
+    console.warn('Mistral entity extraction network error:', err);
+  }
+  return null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
