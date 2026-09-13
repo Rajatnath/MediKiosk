@@ -21,20 +21,53 @@ export async function POST(req: NextRequest) {
     // Map lang to Sarvam language code
     const languageCode = lang === 'hi' ? 'hi-IN' : 'en-IN';
 
-    // Determine appropriate filename & extension based on incoming MIME type
-    const mimeType = audioFile.type || '';
+    const arrayBuffer = await audioFile.arrayBuffer();
+
+    // Normalize and strip parameters (e.g. "audio/webm;codecs=opus" -> "audio/webm")
+    const rawMime = (audioFile.type || '').toLowerCase();
+    const cleanMime = rawMime.split(';')[0].trim();
+
+    // Inspect magic bytes for 100% reliable container detection
+    const header = Buffer.from(arrayBuffer.slice(0, 16));
+    let targetMime = 'audio/webm';
     let filename = 'recording.webm';
-    if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
-      filename = 'recording.mp4';
-    } else if (mimeType.includes('wav')) {
+
+    if (header[0] === 0x1a && header[1] === 0x45 && header[2] === 0xdf && header[3] === 0xa3) {
+      // EBML header -> WebM (Chrome, Firefox, Edge)
+      targetMime = 'audio/webm';
+      filename = 'recording.webm';
+    } else if (header.toString('ascii', 0, 4) === 'RIFF') {
+      // RIFF header -> WAV
+      targetMime = 'audio/wav';
       filename = 'recording.wav';
-    } else if (mimeType.includes('ogg') || mimeType.includes('opus')) {
+    } else if (header.toString('ascii', 0, 4) === 'OggS') {
+      // OggS header -> OGG
+      targetMime = 'audio/ogg';
       filename = 'recording.ogg';
+    } else if (header.toString('ascii', 4, 8) === 'ftyp') {
+      // ISO/IEC Base Media / MP4 / M4A (Safari iOS / macOS)
+      targetMime = 'audio/mp4';
+      filename = 'recording.mp4';
+    } else if (cleanMime.includes('mp4') || cleanMime.includes('m4a') || cleanMime.includes('aac')) {
+      targetMime = cleanMime.includes('aac') ? 'audio/aac' : 'audio/mp4';
+      filename = cleanMime.includes('aac') ? 'recording.aac' : 'recording.mp4';
+    } else if (cleanMime.includes('wav')) {
+      targetMime = 'audio/wav';
+      filename = 'recording.wav';
+    } else if (cleanMime.includes('ogg')) {
+      targetMime = 'audio/ogg';
+      filename = 'recording.ogg';
+    } else if (cleanMime === 'video/webm' || cleanMime === 'audio/webm') {
+      targetMime = 'audio/webm';
+      filename = 'recording.webm';
+    } else {
+      targetMime = 'audio/webm';
+      filename = 'recording.webm';
     }
 
     const sarvamFormData = new FormData();
-    const arrayBuffer = await audioFile.arrayBuffer();
-    const safeBlob = new Blob([arrayBuffer], { type: mimeType || 'audio/webm' });
+    // Strictly pass clean targetMime without parameters to satisfy Sarvam's exact whitelist
+    const safeBlob = new Blob([arrayBuffer], { type: targetMime });
     sarvamFormData.append('file', safeBlob, filename);
     sarvamFormData.append('model', 'saaras:v3'); // Upgrade to latest Sarvam STT model
     sarvamFormData.append('language_code', languageCode);

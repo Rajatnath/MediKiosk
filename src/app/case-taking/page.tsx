@@ -444,8 +444,11 @@ function CaseTakingContent() {
     // 1. Try Sarvam AI STT
     try {
       const formData = new FormData();
-      const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : blob.type.includes('wav') ? 'wav' : 'webm';
-      formData.append('audio', blob, `recording.${ext}`);
+      const rawType = (blob.type || '').toLowerCase();
+      const ext = rawType.includes('mp4') || rawType.includes('m4a') ? 'mp4' : rawType.includes('ogg') ? 'ogg' : rawType.includes('wav') ? 'wav' : 'webm';
+      const cleanMime = rawType.split(';')[0].trim() || (ext === 'mp4' ? 'audio/mp4' : 'audio/webm');
+      const cleanBlob = new Blob([blob], { type: cleanMime });
+      formData.append('audio', cleanBlob, `recording.${ext}`);
       formData.append('lang', lang);
 
       const resp = await fetch('/api/stt', { method: 'POST', body: formData });
